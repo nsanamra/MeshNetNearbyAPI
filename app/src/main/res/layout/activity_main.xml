@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F0F4F8"
+    android:padding="16dp"
+    tools:context=".MainActivity">
+
+    <TextView
+        android:id="@+id/userIdTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerHorizontal="true"
+        android:layout_alignParentTop="true"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="#555555"
+        tools:text="Your ID: 123456789" />
+
+    <!-- New TextView to show connected devices -->
+    <TextView
+        android:id="@+id/connectedDevicesTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/userIdTextView"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:gravity="center"
+        android:textColor="#3F51B5"
+        android:text="Connected Devices: None" />
+
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/messagesRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/inputLayout"
+        android:layout_below="@id/connectedDevicesTextView"
+        android:contentDescription="List of chat messages" />
+
+    <LinearLayout
+        android:id="@+id/inputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <EditText
+            android:id="@+id/messageEditText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="Type a message..."
+            android:inputType="textShortMessage"
+            android:background="@drawable/input_background"
+            android:padding="12dp"
+            android:textColor="@android:color/black" />
+
+        <Button
+            android:id="@+id/sendBroadcastButton"
+            style="@style/SendButton"
+            android:text="All"/>
+
+        <Button
+            android:id="@+id/sendPrivateButton"
+            style="@style/SendButton"
+            android:text="One" />
+    </LinearLayout>
+
+</RelativeLayout>
+
