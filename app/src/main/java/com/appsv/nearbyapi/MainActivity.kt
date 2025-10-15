@@ -16,6 +16,8 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.offlinechatapp.R
+// CRITICAL FIX: Removed the incorrect import for 'R'
+// import com.example.offlinechatapp.R
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 import java.nio.charset.StandardCharsets
@@ -26,7 +28,6 @@ class MainActivity : AppCompatActivity() {
     private val STRATEGY = Strategy.P2P_STAR
     private val SERVICE_ID = "com.appsv.nearbyapi.SERVICE_ID"
 
-    // Use Android ID as a unique identifier. It's more reliable than MAC address.
     private val myUsername: String by lazy {
         Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()
     }
@@ -35,14 +36,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var userIdTextView: TextView
     private lateinit var messagesRecyclerView: RecyclerView
     private lateinit var messageEditText: EditText
+    private lateinit var recipientIdEditText: EditText
     private lateinit var sendBroadcastButton: Button
     private lateinit var sendPrivateButton: Button
-    private lateinit var connectedDevicesTextView: TextView
 
     private lateinit var messageAdapter: MessageAdapter
     private val messages = mutableListOf<Message>()
     private val seenSet = mutableSetOf<String>()
-    private val connectedEndpoints = mutableMapOf<String, String>() // endpointId -> username
+    private val connectedEndpoints = mutableMapOf<String, String>()
 
     companion object {
         private const val REQUEST_CODE_PERMISSIONS = 1001
@@ -53,7 +54,7 @@ class MainActivity : AppCompatActivity() {
                     Manifest.permission.BLUETOOTH_ADVERTISE,
                     Manifest.permission.BLUETOOTH_CONNECT,
                     Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.NEARBY_WIFI_DEVICES // This is the new, required permission
+                    Manifest.permission.NEARBY_WIFI_DEVICES
                 )
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 arrayOf(
@@ -68,7 +69,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -77,6 +77,7 @@ class MainActivity : AppCompatActivity() {
         userIdTextView = findViewById(R.id.userIdTextView)
         messagesRecyclerView = findViewById(R.id.messagesRecyclerView)
         messageEditText = findViewById(R.id.messageEditText)
+        recipientIdEditText = findViewById(R.id.recipientIdEditText)
         sendBroadcastButton = findViewById(R.id.sendBroadcastButton)
         sendPrivateButton = findViewById(R.id.sendPrivateButton)
 
@@ -87,15 +88,31 @@ class MainActivity : AppCompatActivity() {
         messagesRecyclerView.adapter = messageAdapter
 
         sendBroadcastButton.setOnClickListener {
-            sendMessage(messageEditText.text.toString(), "BROADCAST")
-            messageEditText.text.clear()
+            val messageText = messageEditText.text.toString().trim()
+            if (messageText.isNotEmpty()) {
+                sendMessage(messageText, "BROADCAST")
+                messageEditText.text.clear()
+            } else {
+                Toast.makeText(this, "Please enter a message", Toast.LENGTH_SHORT).show()
+            }
         }
 
         sendPrivateButton.setOnClickListener {
-            // In a real app, you would have a UI to select a recipient
-            val recipientId = "RECIPIENT_ID_HERE" // Placeholder
-            sendMessage(messageEditText.text.toString(), recipientId)
+            val recipientId = recipientIdEditText.text.toString().trim()
+            val messageText = messageEditText.text.toString().trim()
+
+            if (recipientId.isEmpty()) {
+                Toast.makeText(this, "Please enter a Recipient ID", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (messageText.isEmpty()) {
+                Toast.makeText(this, "Please enter a message", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            sendMessage(messageText, recipientId)
             messageEditText.text.clear()
+            recipientIdEditText.text.clear()
         }
     }
 
@@ -126,7 +143,6 @@ class MainActivity : AppCompatActivity() {
                 startNearbyServices()
             } else {
                 Toast.makeText(this, "Permissions are required to use this app.", Toast.LENGTH_LONG).show()
-                // Consider showing a dialog to explain why permissions are needed and directing them to settings
             }
         }
     }
@@ -135,7 +151,6 @@ class MainActivity : AppCompatActivity() {
         startAdvertising()
         startDiscovery()
     }
-
 
     private fun startAdvertising() {
         val advertisingOptions = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
@@ -165,29 +180,39 @@ class MainActivity : AppCompatActivity() {
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
+            Log.d("MainActivity", "onConnectionInitiated: accepting connection")
             // Automatically accept connections
             connectionsClient.acceptConnection(endpointId, payloadCallback)
+            // Store the endpoint name for later use
             connectedEndpoints[endpointId] = connectionInfo.endpointName
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             when (result.status.statusCode) {
                 ConnectionsStatusCodes.STATUS_OK -> {
+                    Log.d("MainActivity", "onConnectionResult: Connection successful!")
                     Toast.makeText(this@MainActivity, "Connected to ${connectedEndpoints[endpointId]}", Toast.LENGTH_SHORT).show()
                 }
                 ConnectionsStatusCodes.STATUS_CONNECTION_REJECTED -> {
+                    Log.d("MainActivity", "onConnectionResult: Connection rejected")
                     Toast.makeText(this@MainActivity, "Connection rejected by ${connectedEndpoints[endpointId]}", Toast.LENGTH_SHORT).show()
+                    // CLEANUP: Remove from map if connection is rejected
+                    connectedEndpoints.remove(endpointId)
                 }
                 ConnectionsStatusCodes.STATUS_ERROR -> {
+                    Log.e("MainActivity", "onConnectionResult: Connection error")
                     Toast.makeText(this@MainActivity, "Connection error", Toast.LENGTH_SHORT).show()
+                    // CLEANUP: Remove from map on error
+                    connectedEndpoints.remove(endpointId)
                 }
                 else -> {
-                    // Other status codes
+                    Log.d("MainActivity", "onConnectionResult: Unknown status code ${result.status.statusCode}")
                 }
             }
         }
 
         override fun onDisconnected(endpointId: String) {
+            Log.d("MainActivity", "onDisconnected: ${connectedEndpoints[endpointId]}")
             Toast.makeText(this@MainActivity, "Disconnected from ${connectedEndpoints[endpointId]}", Toast.LENGTH_SHORT).show()
             connectedEndpoints.remove(endpointId)
         }
@@ -195,34 +220,31 @@ class MainActivity : AppCompatActivity() {
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, discoveredEndpointInfo: DiscoveredEndpointInfo) {
+            Log.d("MainActivity", "onEndpointFound: endpoint found, requesting connection")
             connectionsClient.requestConnection(myUsername, endpointId, connectionLifecycleCallback)
+                .addOnFailureListener { e ->
+                    Log.e("MainActivity", "requestConnection failed", e)
+                }
         }
 
         override fun onEndpointLost(endpointId: String) {
-            // A previously discovered endpoint has gone away.
+            Log.d("MainActivity", "onEndpointLost: endpoint lost")
         }
     }
 
     private fun sendMessage(messageText: String, recipientId: String) {
         if (connectedEndpoints.isEmpty()){
-            Toast.makeText(this, "No one is nearby to send a message to.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No one is connected. Message not sent.", Toast.LENGTH_SHORT).show()
             return
         }
-
         val msgId = "$myUsername-${System.currentTimeMillis()}"
         val message = Message(msgId, myUsername, recipientId, messageText)
-
-        // Add to seenSet to prevent loops
         seenSet.add(message.msgId)
-
-        // Add to our own message list
         runOnUiThread {
             messages.add(message)
             messageAdapter.notifyItemInserted(messages.size - 1)
             messagesRecyclerView.scrollToPosition(messages.size - 1)
         }
-
-        // Forward (gossip) to all connected neighbors
         forwardMessage(message)
     }
 
@@ -230,6 +252,9 @@ class MainActivity : AppCompatActivity() {
         val messageString = "${message.msgId}|${message.senderId}|${message.recipientId}|${message.messageText}"
         val payload = Payload.fromBytes(messageString.toByteArray(StandardCharsets.UTF_8))
         connectionsClient.sendPayload(connectedEndpoints.keys.toList(), payload)
+            .addOnFailureListener { e ->
+                Log.e("MainActivity", "sendPayload failed", e)
+            }
     }
 
     private val payloadCallback = object : PayloadCallback() {
@@ -243,15 +268,11 @@ class MainActivity : AppCompatActivity() {
                     val recipientId = parts[2]
                     val messageText = parts[3]
 
-                    // Check if we have already seen this message
                     if (seenSet.contains(msgId)) {
-                        return // Already processed, do not forward
+                        return
                     }
                     seenSet.add(msgId)
-
                     val receivedMessage = Message(msgId, senderId, recipientId, messageText)
-
-                    // Display if it's a broadcast or for me
                     if (recipientId == "BROADCAST" || recipientId == myUsername) {
                         runOnUiThread {
                             messages.add(receivedMessage)
@@ -259,14 +280,11 @@ class MainActivity : AppCompatActivity() {
                             messagesRecyclerView.scrollToPosition(messages.size - 1)
                         }
                     }
-                    // Gossip to neighbors
                     forwardMessage(receivedMessage)
                 }
             }
         }
-
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-            // Bytes payload transfer updates are sent here.
         }
     }
 }
