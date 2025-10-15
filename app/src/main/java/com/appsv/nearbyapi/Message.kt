@@ -1,11 +1,12 @@
 package com.appsv.nearbyapi
 
-import org.w3c.dom.Text
+import java.io.Serializable
 
+// Add ": Serializable" to allow this object to be saved
 data class Message(
     val msgId: String,
-    val senderId: String, // This must be 'senderId' to match the adapter
+    val senderId: String,
     val recipientId: String,
     val messageText: String
-)
+) : Serializable
 

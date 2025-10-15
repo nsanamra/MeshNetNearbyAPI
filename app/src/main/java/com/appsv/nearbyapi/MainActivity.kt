@@ -16,8 +16,6 @@ import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.offlinechatapp.R
-// CRITICAL FIX: Removed the incorrect import for 'R'
-// import com.example.offlinechatapp.R
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
 import java.nio.charset.StandardCharsets
@@ -41,12 +39,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sendPrivateButton: Button
 
     private lateinit var messageAdapter: MessageAdapter
-    private val messages = mutableListOf<Message>()
-    private val seenSet = mutableSetOf<String>()
+    private var messages = mutableListOf<Message>()
+    private var seenSet = mutableSetOf<String>()
     private val connectedEndpoints = mutableMapOf<String, String>()
 
     companion object {
         private const val REQUEST_CODE_PERMISSIONS = 1001
+        private const val KEY_MESSAGES = "messages_key"
+        private const val KEY_SEEN_SET = "seen_set_key"
+
+        // ADDED: Flags to track the state of Nearby services across rotations
+        @Volatile private var isAdvertising = false
+        @Volatile private var isDiscovering = false
+
         private val REQUIRED_PERMISSIONS: Array<String> by lazy {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 arrayOf(
@@ -72,6 +77,11 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        if (savedInstanceState != null) {
+            messages = (savedInstanceState.getSerializable(KEY_MESSAGES) as? ArrayList<Message>)?.toMutableList() ?: mutableListOf()
+            seenSet = (savedInstanceState.getSerializable(KEY_SEEN_SET) as? HashSet<String>)?.toMutableSet() ?: mutableSetOf()
+        }
 
         connectionsClient = Nearby.getConnectionsClient(this)
         userIdTextView = findViewById(R.id.userIdTextView)
@@ -116,6 +126,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putSerializable(KEY_MESSAGES, ArrayList(messages))
+        outState.putSerializable(KEY_SEEN_SET, HashSet(seenSet))
+    }
+
     override fun onStart() {
         super.onStart()
         if (hasPermissions()) {
@@ -126,7 +142,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
-        connectionsClient.stopAllEndpoints()
+        if (!isChangingConfigurations) {
+            connectionsClient.stopAllEndpoints()
+            // ADDED: Reset flags when the app is actually closing
+            isAdvertising = false
+            isDiscovering = false
+        }
         super.onStop()
     }
 
@@ -147,9 +168,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // UPDATED: Check flags before starting services
     private fun startNearbyServices() {
-        startAdvertising()
-        startDiscovery()
+        if (!isAdvertising) {
+            startAdvertising()
+        }
+        if (!isDiscovering) {
+            startDiscovery()
+        }
     }
 
     private fun startAdvertising() {
@@ -159,9 +185,12 @@ class MainActivity : AppCompatActivity() {
         ).addOnSuccessListener {
             Toast.makeText(this, "Advertising started", Toast.LENGTH_SHORT).show()
             Log.d("MainActivity", "Advertising started successfully")
+            // ADDED: Set the flag on success
+            isAdvertising = true
         }.addOnFailureListener { e ->
             Toast.makeText(this, "Failed to start advertising", Toast.LENGTH_SHORT).show()
             Log.e("MainActivity", "Advertising failed", e)
+            isAdvertising = false
         }
     }
 
@@ -172,18 +201,19 @@ class MainActivity : AppCompatActivity() {
         ).addOnSuccessListener {
             Toast.makeText(this, "Discovery started", Toast.LENGTH_SHORT).show()
             Log.d("MainActivity", "Discovery started successfully")
+            // ADDED: Set the flag on success
+            isDiscovering = true
         }.addOnFailureListener { e ->
             Toast.makeText(this, "Failed to start discovery", Toast.LENGTH_SHORT).show()
             Log.e("MainActivity", "Discovery failed", e)
+            isDiscovering = false
         }
     }
 
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
             Log.d("MainActivity", "onConnectionInitiated: accepting connection")
-            // Automatically accept connections
             connectionsClient.acceptConnection(endpointId, payloadCallback)
-            // Store the endpoint name for later use
             connectedEndpoints[endpointId] = connectionInfo.endpointName
         }
 
@@ -196,13 +226,11 @@ class MainActivity : AppCompatActivity() {
                 ConnectionsStatusCodes.STATUS_CONNECTION_REJECTED -> {
                     Log.d("MainActivity", "onConnectionResult: Connection rejected")
                     Toast.makeText(this@MainActivity, "Connection rejected by ${connectedEndpoints[endpointId]}", Toast.LENGTH_SHORT).show()
-                    // CLEANUP: Remove from map if connection is rejected
                     connectedEndpoints.remove(endpointId)
                 }
                 ConnectionsStatusCodes.STATUS_ERROR -> {
                     Log.e("MainActivity", "onConnectionResult: Connection error")
                     Toast.makeText(this@MainActivity, "Connection error", Toast.LENGTH_SHORT).show()
-                    // CLEANUP: Remove from map on error
                     connectedEndpoints.remove(endpointId)
                 }
                 else -> {
@@ -212,19 +240,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onDisconnected(endpointId: String) {
-            Log.d("MainActivity", "onDisconnected: ${connectedEndpoints[endpointId]}")
-            Toast.makeText(this@MainActivity, "Disconnected from ${connectedEndpoints[endpointId]}", Toast.LENGTH_SHORT).show()
+            val username = connectedEndpoints[endpointId] ?: "Unknown"
+            Log.d("MainActivity", "onDisconnected: $username")
+            Toast.makeText(this@MainActivity, "Disconnected from $username", Toast.LENGTH_SHORT).show()
             connectedEndpoints.remove(endpointId)
         }
     }
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, discoveredEndpointInfo: DiscoveredEndpointInfo) {
-            Log.d("MainActivity", "onEndpointFound: endpoint found, requesting connection")
-            connectionsClient.requestConnection(myUsername, endpointId, connectionLifecycleCallback)
-                .addOnFailureListener { e ->
-                    Log.e("MainActivity", "requestConnection failed", e)
-                }
+            Log.d("MainActivity", "onEndpointFound: endpoint found, requesting connection to ${discoveredEndpointInfo.endpointName}")
+            // Do not connect to an endpoint we're already connected to
+            if (!connectedEndpoints.containsKey(endpointId)) {
+                connectionsClient.requestConnection(myUsername, endpointId, connectionLifecycleCallback)
+                    .addOnFailureListener { e ->
+                        Log.e("MainActivity", "requestConnection failed", e)
+                    }
+            }
         }
 
         override fun onEndpointLost(endpointId: String) {
