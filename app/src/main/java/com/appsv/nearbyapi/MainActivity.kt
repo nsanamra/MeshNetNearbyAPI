@@ -6,10 +6,12 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -37,18 +39,26 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recipientIdEditText: EditText
     private lateinit var sendBroadcastButton: Button
     private lateinit var sendPrivateButton: Button
+    // NEW: UI elements for advertising and discovery
+    private lateinit var advertiseButton: Button
+    private lateinit var discoverButton: Button
+    private lateinit var discoveredDevicesRecyclerView: RecyclerView
+    private lateinit var discoveredDevicesLabel: TextView
 
     private lateinit var messageAdapter: MessageAdapter
+    private lateinit var discoveredDeviceAdapter: DiscoveredDeviceAdapter
+
     private var messages = mutableListOf<Message>()
     private var seenSet = mutableSetOf<String>()
     private val connectedEndpoints = mutableMapOf<String, String>()
+    // NEW: List to hold discovered endpoints
+    private val discoveredEndpoints = mutableMapOf<String, DiscoveredEndpointInfo>()
 
     companion object {
         private const val REQUEST_CODE_PERMISSIONS = 1001
         private const val KEY_MESSAGES = "messages_key"
         private const val KEY_SEEN_SET = "seen_set_key"
 
-        // ADDED: Flags to track the state of Nearby services across rotations
         @Volatile private var isAdvertising = false
         @Volatile private var isDiscovering = false
 
@@ -90,12 +100,55 @@ class MainActivity : AppCompatActivity() {
         recipientIdEditText = findViewById(R.id.recipientIdEditText)
         sendBroadcastButton = findViewById(R.id.sendBroadcastButton)
         sendPrivateButton = findViewById(R.id.sendPrivateButton)
+        // NEW: Initialize new UI elements
+        advertiseButton = findViewById(R.id.advertiseButton)
+        discoverButton = findViewById(R.id.discoverButton)
+        discoveredDevicesRecyclerView = findViewById(R.id.discoveredDevicesRecyclerView)
+        discoveredDevicesLabel = findViewById(R.id.discoveredDevicesLabel)
 
         userIdTextView.text = "Your ID: $myUsername"
 
+        // Setup for messages RecyclerView
         messageAdapter = MessageAdapter(messages, myUsername)
         messagesRecyclerView.layoutManager = LinearLayoutManager(this)
         messagesRecyclerView.adapter = messageAdapter
+
+        // NEW: Setup for discovered devices RecyclerView
+        discoveredDeviceAdapter = DiscoveredDeviceAdapter(discoveredEndpoints.toList()) { endpointId ->
+            if (!connectedEndpoints.containsKey(endpointId)) {
+                connectionsClient.requestConnection(myUsername, endpointId, connectionLifecycleCallback)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Connection requested...", Toast.LENGTH_SHORT).show()
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("MainActivity", "requestConnection failed", e)
+                        Toast.makeText(this, "Failed to request connection", Toast.LENGTH_SHORT).show()
+                    }
+            } else {
+                Toast.makeText(this, "Already connected or connecting.", Toast.LENGTH_SHORT).show()
+            }
+        }
+        discoveredDevicesRecyclerView.layoutManager = LinearLayoutManager(this)
+        discoveredDevicesRecyclerView.adapter = discoveredDeviceAdapter
+
+
+        // NEW: Advertise button logic
+        advertiseButton.setOnClickListener {
+            if (isAdvertising) {
+                stopAdvertising()
+            } else {
+                if (hasPermissions()) startAdvertising() else requestPermissions()
+            }
+        }
+
+        // NEW: Discover button logic
+        discoverButton.setOnClickListener {
+            if (isDiscovering) {
+                stopDiscovery()
+            } else {
+                if (hasPermissions()) startDiscovery() else requestPermissions()
+            }
+        }
 
         sendBroadcastButton.setOnClickListener {
             val messageText = messageEditText.text.toString().trim()
@@ -132,22 +185,19 @@ class MainActivity : AppCompatActivity() {
         outState.putSerializable(KEY_SEEN_SET, HashSet(seenSet))
     }
 
+    // MODIFIED: No auto-start, user initiates via buttons
     override fun onStart() {
         super.onStart()
-        if (hasPermissions()) {
-            startNearbyServices()
-        } else {
-            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+        if (!hasPermissions()) {
+            requestPermissions()
         }
     }
 
     override fun onStop() {
-        if (!isChangingConfigurations) {
-            connectionsClient.stopAllEndpoints()
-            // ADDED: Reset flags when the app is actually closing
-            isAdvertising = false
-            isDiscovering = false
-        }
+        stopAdvertising()
+        stopDiscovery()
+        connectionsClient.stopAllEndpoints()
+        connectedEndpoints.clear()
         super.onStop()
     }
 
@@ -157,24 +207,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestPermissions() {
+        ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
-            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                startNearbyServices()
-            } else {
+            if (!(grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED })) {
                 Toast.makeText(this, "Permissions are required to use this app.", Toast.LENGTH_LONG).show()
             }
-        }
-    }
-
-    // UPDATED: Check flags before starting services
-    private fun startNearbyServices() {
-        if (!isAdvertising) {
-            startAdvertising()
-        }
-        if (!isDiscovering) {
-            startDiscovery()
         }
     }
 
@@ -185,13 +227,21 @@ class MainActivity : AppCompatActivity() {
         ).addOnSuccessListener {
             Toast.makeText(this, "Advertising started", Toast.LENGTH_SHORT).show()
             Log.d("MainActivity", "Advertising started successfully")
-            // ADDED: Set the flag on success
             isAdvertising = true
+            advertiseButton.text = "Stop Advertising"
         }.addOnFailureListener { e ->
             Toast.makeText(this, "Failed to start advertising", Toast.LENGTH_SHORT).show()
             Log.e("MainActivity", "Advertising failed", e)
             isAdvertising = false
         }
+    }
+
+    // NEW: Function to stop advertising
+    private fun stopAdvertising() {
+        connectionsClient.stopAdvertising()
+        isAdvertising = false
+        advertiseButton.text = "Advertise"
+        Log.d("MainActivity", "Advertising stopped")
     }
 
     private fun startDiscovery() {
@@ -201,8 +251,11 @@ class MainActivity : AppCompatActivity() {
         ).addOnSuccessListener {
             Toast.makeText(this, "Discovery started", Toast.LENGTH_SHORT).show()
             Log.d("MainActivity", "Discovery started successfully")
-            // ADDED: Set the flag on success
             isDiscovering = true
+            discoverButton.text = "Stop Discovery"
+            // NEW: Show discovery UI
+            discoveredDevicesLabel.visibility = View.VISIBLE
+            discoveredDevicesRecyclerView.visibility = View.VISIBLE
         }.addOnFailureListener { e ->
             Toast.makeText(this, "Failed to start discovery", Toast.LENGTH_SHORT).show()
             Log.e("MainActivity", "Discovery failed", e)
@@ -210,11 +263,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // NEW: Function to stop discovery
+    private fun stopDiscovery() {
+        connectionsClient.stopDiscovery()
+        isDiscovering = false
+        discoverButton.text = "Discover"
+        // NEW: Hide discovery UI and clear list
+        discoveredEndpoints.clear()
+        updateDiscoveredDevicesList()
+        discoveredDevicesLabel.visibility = View.GONE
+        discoveredDevicesRecyclerView.visibility = View.GONE
+        Log.d("MainActivity", "Discovery stopped")
+    }
+
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
             Log.d("MainActivity", "onConnectionInitiated: accepting connection")
-            connectionsClient.acceptConnection(endpointId, payloadCallback)
-            connectedEndpoints[endpointId] = connectionInfo.endpointName
+            // NEW: Show a dialog to accept the connection
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("Accept Connection")
+                .setMessage("Accept connection from ${connectionInfo.endpointName}?")
+                .setPositiveButton("Accept") { _, _ ->
+                    connectionsClient.acceptConnection(endpointId, payloadCallback)
+                    connectedEndpoints[endpointId] = connectionInfo.endpointName
+                }
+                .setNegativeButton("Reject") { _, _ ->
+                    connectionsClient.rejectConnection(endpointId)
+                }
+                .show()
         }
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
@@ -222,10 +298,12 @@ class MainActivity : AppCompatActivity() {
                 ConnectionsStatusCodes.STATUS_OK -> {
                     Log.d("MainActivity", "onConnectionResult: Connection successful!")
                     Toast.makeText(this@MainActivity, "Connected to ${connectedEndpoints[endpointId]}", Toast.LENGTH_SHORT).show()
+                    // NEW: A connection is established, stop discovery to save battery
+                    stopDiscovery()
                 }
                 ConnectionsStatusCodes.STATUS_CONNECTION_REJECTED -> {
                     Log.d("MainActivity", "onConnectionResult: Connection rejected")
-                    Toast.makeText(this@MainActivity, "Connection rejected by ${connectedEndpoints[endpointId]}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Connection rejected by peer", Toast.LENGTH_SHORT).show()
                     connectedEndpoints.remove(endpointId)
                 }
                 ConnectionsStatusCodes.STATUS_ERROR -> {
@@ -249,20 +327,41 @@ class MainActivity : AppCompatActivity() {
 
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, discoveredEndpointInfo: DiscoveredEndpointInfo) {
-            Log.d("MainActivity", "onEndpointFound: endpoint found, requesting connection to ${discoveredEndpointInfo.endpointName}")
-            // Do not connect to an endpoint we're already connected to
+            Log.d("MainActivity", "onEndpointFound: endpoint found: ${discoveredEndpointInfo.endpointName}")
+            // NEW: Add to list and update UI
             if (!connectedEndpoints.containsKey(endpointId)) {
-                connectionsClient.requestConnection(myUsername, endpointId, connectionLifecycleCallback)
-                    .addOnFailureListener { e ->
-                        Log.e("MainActivity", "requestConnection failed", e)
-                    }
+                discoveredEndpoints[endpointId] = discoveredEndpointInfo
+                updateDiscoveredDevicesList()
             }
         }
 
         override fun onEndpointLost(endpointId: String) {
-            Log.d("MainActivity", "onEndpointLost: endpoint lost")
+            Log.d("MainActivity", "onEndpointLost: endpoint lost: $endpointId")
+            // NEW: Remove from list and update UI
+            discoveredEndpoints.remove(endpointId)
+            updateDiscoveredDevicesList()
         }
     }
+
+    // NEW: Helper function to update the discovered devices RecyclerView
+    private fun updateDiscoveredDevicesList() {
+        discoveredDeviceAdapter = DiscoveredDeviceAdapter(discoveredEndpoints.toList()) { endpointId ->
+            if (!connectedEndpoints.containsKey(endpointId)) {
+                connectionsClient.requestConnection(myUsername, endpointId, connectionLifecycleCallback)
+                    .addOnSuccessListener {
+                        Toast.makeText(this, "Connection requested...", Toast.LENGTH_SHORT).show()
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("MainActivity", "requestConnection failed", e)
+                        Toast.makeText(this, "Failed to request connection", Toast.LENGTH_SHORT).show()
+                    }
+            } else {
+                Toast.makeText(this, "Already connected or connecting.", Toast.LENGTH_SHORT).show()
+            }
+        }
+        discoveredDevicesRecyclerView.adapter = discoveredDeviceAdapter
+    }
+
 
     private fun sendMessage(messageText: String, recipientId: String) {
         if (connectedEndpoints.isEmpty()){
@@ -320,4 +419,3 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
-
