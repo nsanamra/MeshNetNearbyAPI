@@ -2,6 +2,7 @@ package com.appsv.nearbyapi
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -51,11 +52,20 @@ class MainActivity : AppCompatActivity() {
     private val STRATEGY = Strategy.P2P_STAR
     private val SERVICE_ID = "com.appsv.nearbyapi.SERVICE_ID"
 
+    // CHANGED: Persist User ID to prevent key mismatch on restart
     private val myUsername: String by lazy {
-        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()
+        val prefs = getSharedPreferences("ChatAppPrefs", Context.MODE_PRIVATE)
+        var id = prefs.getString("USER_ID", null)
+        if (id == null) {
+            id = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+            if (id == null || id == "9774d56d682e549c") { // Common emulator ID
+                id = UUID.randomUUID().toString()
+            }
+            prefs.edit().putString("USER_ID", id).apply()
+        }
+        id!!
     }
 
-    // --- E2E Encryption Variables ---
     private lateinit var privateKeysetHandle: KeysetHandle
     private lateinit var publicKeysetHandle: KeysetHandle
     private lateinit var hybridDecrypt: HybridDecrypt
@@ -67,7 +77,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var messagesRecyclerView: RecyclerView
     private lateinit var messageEditText: EditText
 
-    // Spinner for recipients
     private lateinit var recipientSpinner: Spinner
     private lateinit var recipientAdapter: ArrayAdapter<String>
     private val recipientList = ArrayList<String>()
@@ -82,7 +91,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var attachImageButton: ImageButton
     private lateinit var attachmentPreviewTextView: TextView
 
-    // NEW: Progress Bar
     private lateinit var sendingProgressBar: ProgressBar
 
     private var pendingImageUri: Uri? = null
@@ -92,7 +100,7 @@ class MainActivity : AppCompatActivity() {
 
     private var messages = mutableListOf<Message>()
     private var seenSet = mutableSetOf<String>()
-    private val connectedEndpoints = mutableMapOf<String, String>() // EndpointID -> Username
+    private val connectedEndpoints = mutableMapOf<String, String>()
     private val discoveredEndpoints = mutableMapOf<String, DiscoveredEndpointInfo>()
 
     private val imagePickerLauncher: ActivityResultLauncher<String> =
@@ -153,7 +161,6 @@ class MainActivity : AppCompatActivity() {
         messagesRecyclerView = findViewById(R.id.messagesRecyclerView)
         messageEditText = findViewById(R.id.messageEditText)
 
-        // Initialize Spinner
         recipientSpinner = findViewById(R.id.recipientSpinner)
         recipientAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, recipientList)
         recipientSpinner.adapter = recipientAdapter
@@ -168,7 +175,6 @@ class MainActivity : AppCompatActivity() {
         attachImageButton = findViewById(R.id.attachImageButton)
         attachmentPreviewTextView = findViewById(R.id.attachmentPreviewTextView)
 
-        // NEW: Initialize ProgressBar
         sendingProgressBar = findViewById(R.id.sendingProgressBar)
 
         userIdTextView.text = "Your ID: $myUsername"
@@ -222,8 +228,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-
-    // --- ENCRYPTION LOGIC ---
 
     private fun initEncryption() {
         try {
@@ -362,11 +366,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onDisconnected(endpointId: String) {
-            // FIX: Cleanup logic for disconnected users
             val username = connectedEndpoints[endpointId]
             connectedEndpoints.remove(endpointId)
 
-            // Remove from Encryption Map and Spinner if exists
             if (username != null) {
                 peerPublicKeys.remove(username)
                 runOnUiThread {
@@ -412,38 +414,36 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Capture UI inputs on Main Thread
         val inputText = messageEditText.text.toString().trim()
         val imageUri = pendingImageUri
 
         if (imageUri == null && inputText.isEmpty()) return
 
-        // FIX: Show Loader and Disable buttons
         sendingProgressBar.visibility = View.VISIBLE
         sendBroadcastButton.isEnabled = false
         sendPrivateButton.isEnabled = false
 
-        // Clear UI immediately
         clearAttachment()
         messageEditText.text.clear()
 
-        // FIX: Run heavy logic in background thread
         thread {
             try {
                 val msgId = "$myUsername-${System.currentTimeMillis()}"
                 var content: String
+                val rawContent: String
                 var type: String
 
                 if (imageUri != null) {
-                    // Heavy Operation 1: Image Processing
-                    content = uriToBase64(imageUri) ?: return@thread
+                    val base64Img = uriToBase64(imageUri) ?: return@thread
+                    rawContent = base64Img
+                    content = base64Img
                     type = "IMAGE"
                 } else {
+                    rawContent = inputText
                     content = inputText
                     type = "TEXT"
                 }
 
-                // Heavy Operation 2: Encryption
                 if (recipientId != "BROADCAST") {
                     val recipientKey = peerPublicKeys[recipientId]
                     if (recipientKey != null) {
@@ -453,47 +453,43 @@ class MainActivity : AppCompatActivity() {
                         } catch (e: Exception) {
                             runOnUiThread {
                                 Toast.makeText(this, "Encryption failed", Toast.LENGTH_SHORT).show()
-                                sendingProgressBar.visibility = View.GONE
-                                sendBroadcastButton.isEnabled = true
-                                sendPrivateButton.isEnabled = true
+                                resetUI()
                             }
                             return@thread
                         }
                     } else {
                         runOnUiThread {
-                            Toast.makeText(this, "Key not found", Toast.LENGTH_SHORT).show()
-                            sendingProgressBar.visibility = View.GONE
-                            sendBroadcastButton.isEnabled = true
-                            sendPrivateButton.isEnabled = true
+                            Toast.makeText(this, "Key not found for $recipientId", Toast.LENGTH_SHORT).show()
+                            resetUI()
                         }
                         return@thread
                     }
                 }
 
                 val msgForNetwork = Message(msgId, myUsername, recipientId, type, content)
+                val msgForLocal = Message(msgId, myUsername, recipientId, type, rawContent)
+
                 seenSet.add(msgId)
 
                 runOnUiThread {
-                    messages.add(msgForNetwork)
+                    messages.add(msgForLocal)
                     messageAdapter.notifyItemInserted(messages.size - 1)
                     messagesRecyclerView.scrollToPosition(messages.size - 1)
-
-                    // Restore UI
-                    sendingProgressBar.visibility = View.GONE
-                    sendBroadcastButton.isEnabled = true
-                    sendPrivateButton.isEnabled = true
+                    resetUI()
                 }
                 forwardMessage(msgForNetwork)
 
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error in sendMessage thread", e)
-                runOnUiThread {
-                    sendingProgressBar.visibility = View.GONE
-                    sendBroadcastButton.isEnabled = true
-                    sendPrivateButton.isEnabled = true
-                }
+                runOnUiThread { resetUI() }
             }
         }
+    }
+
+    private fun resetUI() {
+        sendingProgressBar.visibility = View.GONE
+        sendBroadcastButton.isEnabled = true
+        sendPrivateButton.isEnabled = true
     }
 
     private fun forwardMessage(message: Message) {
@@ -509,13 +505,14 @@ class MainActivity : AppCompatActivity() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             if (payload.type == Payload.Type.BYTES) {
                 val receivedString = payload.asBytes()?.toString(StandardCharsets.UTF_8) ?: return
-                val parts = receivedString.split("|")
+                // CHANGED: Limit split to 5 to avoid issues if content contains pipe chars
+                val parts = receivedString.split("|", limit = 5)
                 if (parts.size == 5) {
-                    val type = parts[0]
-                    val msgId = parts[1]
-                    val sender = parts[2]
-                    val recipient = parts[3]
-                    var content = parts[4]
+                    val type = parts[0].trim()
+                    val msgId = parts[1].trim()
+                    val sender = parts[2].trim()
+                    val recipient = parts[3].trim()
+                    var content = parts[4] // Content might contain padding or whitespace which is valid in Base64
 
                     if (seenSet.contains(msgId)) return
                     seenSet.add(msgId)
@@ -526,14 +523,14 @@ class MainActivity : AppCompatActivity() {
                         return
                     }
 
-                    // Decryption
+                    // Decryption attempt
                     if (recipient == myUsername) {
                         try {
                             val ciphertext = Base64.decode(content, Base64.NO_WRAP)
                             val decryptedBytes = hybridDecrypt.decrypt(ciphertext, null)
                             content = String(decryptedBytes, StandardCharsets.UTF_8)
                         } catch (e: Exception) {
-                            Log.e("Encryption", "Decryption failed", e)
+                            Log.e("Encryption", "Decryption failed from $sender", e)
                             content = "[Decryption Failed]"
                         }
                     }
@@ -565,8 +562,6 @@ class MainActivity : AppCompatActivity() {
             )
             val encryptPrimitive = handle.getPrimitive(HybridEncrypt::class.java)
             peerPublicKeys[senderId] = encryptPrimitive
-
-            Log.d("Encryption", "Stored Public Key for $senderId")
 
             runOnUiThread {
                 if (!recipientList.contains(senderId)) {

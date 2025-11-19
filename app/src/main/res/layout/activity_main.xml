@@ -64,7 +64,6 @@
         android:visibility="gone"
         tools:visibility="visible"/>
 
-    <!-- NEW: Loading Progress Bar (Centered, Hidden by default) -->
     <ProgressBar
         android:id="@+id/sendingProgressBar"
         android:layout_width="wrap_content"
@@ -125,6 +124,7 @@
         android:padding="12dp"
         android:textColor="@android:color/black" />
 
+    <!-- Preview Layout -->
     <TextView
         android:id="@+id/attachmentPreviewTextView"
         android:layout_width="match_parent"
