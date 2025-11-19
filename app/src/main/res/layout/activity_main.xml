@@ -64,6 +64,15 @@
         android:visibility="gone"
         tools:visibility="visible"/>
 
+    <!-- NEW: Loading Progress Bar (Centered, Hidden by default) -->
+    <ProgressBar
+        android:id="@+id/sendingProgressBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:visibility="gone"
+        android:elevation="10dp"/>
+
     <!-- BOTTOM UI (Chat) -->
 
     <LinearLayout
@@ -75,7 +84,6 @@
         android:paddingTop="10dp"
         android:orientation="horizontal">
 
-        <!-- Attach Image Button -->
         <ImageButton
             android:id="@+id/attachImageButton"
             android:layout_width="wrap_content"
@@ -86,7 +94,6 @@
             android:paddingStart="12dp"
             android:paddingEnd="12dp"/>
 
-        <!-- CHANGED: Restored Broadcast Button -->
         <Button
             android:id="@+id/sendBroadcastButton"
             style="@style/Widget.AppCompat.Button.Colored"
@@ -97,7 +104,6 @@
             android:layout_marginStart="4dp"
             android:text="Broadcast" />
 
-        <!-- CHANGED: Restored Private Button -->
         <Button
             android:id="@+id/sendPrivateButton"
             style="@style/Widget.AppCompat.Button.Colored"
@@ -119,7 +125,6 @@
         android:padding="12dp"
         android:textColor="@android:color/black" />
 
-    <!-- Attachment Preview -->
     <TextView
         android:id="@+id/attachmentPreviewTextView"
         android:layout_width="match_parent"
@@ -133,7 +138,6 @@
         android:visibility="gone"
         tools:visibility="visible"/>
 
-    <!-- Recipient Spinner (Dropdown) -->
     <Spinner
         android:id="@+id/recipientSpinner"
         android:layout_width="match_parent"
