@@ -8,7 +8,6 @@
     android:paddingTop="4dp"
     android:paddingBottom="4dp">
 
-    <!-- The adapter is looking for this specific LinearLayout with this exact ID -->
     <LinearLayout
         android:id="@+id/messageBubble"
         android:layout_width="wrap_content"
@@ -28,6 +27,15 @@
             android:visibility="gone"
             />
 
+        <ImageView
+            android:id="@+id/messageImageView"
+            android:layout_width="250dp"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:visibility="gone"
+            android:layout_marginTop="4dp" />
+
         <TextView
             android:id="@+id/messageTextView"
             android:layout_width="wrap_content"
@@ -38,4 +46,3 @@
     </LinearLayout>
 
 </LinearLayout>
-

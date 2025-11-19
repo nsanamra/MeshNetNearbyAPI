@@ -1,16 +1,26 @@
 package com.appsv.nearbyapi
 
+// Add all these imports at the top
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.provider.Settings
+import android.util.Base64
 import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -20,17 +30,20 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.offlinechatapp.R
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.*
+import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
+    // ... (Constants STRATEGY, SERVICE_ID, myUsername are unchanged) ...
     private val STRATEGY = Strategy.P2P_STAR
     private val SERVICE_ID = "com.appsv.nearbyapi.SERVICE_ID"
 
     private val myUsername: String by lazy {
         Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()
     }
+
 
     private lateinit var connectionsClient: ConnectionsClient
     private lateinit var userIdTextView: TextView
@@ -39,11 +52,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recipientIdEditText: EditText
     private lateinit var sendBroadcastButton: Button
     private lateinit var sendPrivateButton: Button
-    // NEW: UI elements for advertising and discovery
     private lateinit var advertiseButton: Button
     private lateinit var discoverButton: Button
     private lateinit var discoveredDevicesRecyclerView: RecyclerView
     private lateinit var discoveredDevicesLabel: TextView
+
+    // NEW: UI for image attachment
+    private lateinit var attachImageButton: ImageButton
+    private lateinit var attachmentPreviewTextView: TextView
+    private var pendingImageUri: Uri? = null
 
     private lateinit var messageAdapter: MessageAdapter
     private lateinit var discoveredDeviceAdapter: DiscoveredDeviceAdapter
@@ -51,9 +68,22 @@ class MainActivity : AppCompatActivity() {
     private var messages = mutableListOf<Message>()
     private var seenSet = mutableSetOf<String>()
     private val connectedEndpoints = mutableMapOf<String, String>()
-    // NEW: List to hold discovered endpoints
     private val discoveredEndpoints = mutableMapOf<String, DiscoveredEndpointInfo>()
 
+    // NEW: ActivityResultLauncher for picking an image
+    private val imagePickerLauncher: ActivityResultLauncher<String> =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            uri?.let {
+                pendingImageUri = it
+                val fileName = getFileName(it)
+                attachmentPreviewTextView.text = "Attached: $fileName (click to clear)"
+                attachmentPreviewTextView.visibility = View.VISIBLE
+                messageEditText.isEnabled = false // Disable text when image is attached
+                messageEditText.hint = "Image attached"
+            }
+        }
+
+    // ... (Companion object with permissions is unchanged) ...
     companion object {
         private const val REQUEST_CODE_PERMISSIONS = 1001
         private const val KEY_MESSAGES = "messages_key"
@@ -100,11 +130,14 @@ class MainActivity : AppCompatActivity() {
         recipientIdEditText = findViewById(R.id.recipientIdEditText)
         sendBroadcastButton = findViewById(R.id.sendBroadcastButton)
         sendPrivateButton = findViewById(R.id.sendPrivateButton)
-        // NEW: Initialize new UI elements
         advertiseButton = findViewById(R.id.advertiseButton)
         discoverButton = findViewById(R.id.discoverButton)
         discoveredDevicesRecyclerView = findViewById(R.id.discoveredDevicesRecyclerView)
         discoveredDevicesLabel = findViewById(R.id.discoveredDevicesLabel)
+
+        // NEW: Initialize attachment UI
+        attachImageButton = findViewById(R.id.attachImageButton)
+        attachmentPreviewTextView = findViewById(R.id.attachmentPreviewTextView)
 
         userIdTextView.text = "Your ID: $myUsername"
 
@@ -113,7 +146,7 @@ class MainActivity : AppCompatActivity() {
         messagesRecyclerView.layoutManager = LinearLayoutManager(this)
         messagesRecyclerView.adapter = messageAdapter
 
-        // NEW: Setup for discovered devices RecyclerView
+        // ... (Discovered devices RecyclerView setup is unchanged) ...
         discoveredDeviceAdapter = DiscoveredDeviceAdapter(discoveredEndpoints.toList()) { endpointId ->
             if (!connectedEndpoints.containsKey(endpointId)) {
                 connectionsClient.requestConnection(myUsername, endpointId, connectionLifecycleCallback)
@@ -132,7 +165,7 @@ class MainActivity : AppCompatActivity() {
         discoveredDevicesRecyclerView.adapter = discoveredDeviceAdapter
 
 
-        // NEW: Advertise button logic
+        // ... (Advertise/Discover button listeners are unchanged) ...
         advertiseButton.setOnClickListener {
             if (isAdvertising) {
                 stopAdvertising()
@@ -141,7 +174,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // NEW: Discover button logic
         discoverButton.setOnClickListener {
             if (isDiscovering) {
                 stopDiscovery()
@@ -150,42 +182,39 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // NEW: Attach button listener
+        attachImageButton.setOnClickListener {
+            imagePickerLauncher.launch("image/*")
+        }
+
+        // NEW: Clear attachment listener
+        attachmentPreviewTextView.setOnClickListener {
+            clearAttachment()
+        }
+
+        // MODIFIED: Send button listeners
         sendBroadcastButton.setOnClickListener {
-            val messageText = messageEditText.text.toString().trim()
-            if (messageText.isNotEmpty()) {
-                sendMessage(messageText, "BROADCAST")
-                messageEditText.text.clear()
-            } else {
-                Toast.makeText(this, "Please enter a message", Toast.LENGTH_SHORT).show()
-            }
+            sendMessage("BROADCAST") // Pass recipient
         }
 
         sendPrivateButton.setOnClickListener {
             val recipientId = recipientIdEditText.text.toString().trim()
-            val messageText = messageEditText.text.toString().trim()
 
             if (recipientId.isEmpty()) {
                 Toast.makeText(this, "Please enter a Recipient ID", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            if (messageText.isEmpty()) {
-                Toast.makeText(this, "Please enter a message", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-
-            sendMessage(messageText, recipientId)
-            messageEditText.text.clear()
-            recipientIdEditText.text.clear()
+            sendMessage(recipientId) // Pass recipient
         }
     }
 
+    // ... (onSaveInstanceState, onStart, onStop, permissions logic is unchanged) ...
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putSerializable(KEY_MESSAGES, ArrayList(messages))
         outState.putSerializable(KEY_SEEN_SET, HashSet(seenSet))
     }
 
-    // MODIFIED: No auto-start, user initiates via buttons
     override fun onStart() {
         super.onStart()
         if (!hasPermissions()) {
@@ -220,6 +249,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ... (start/stopAdvertising, start/stopDiscovery, connectionLifecycleCallback, endpointDiscoveryCallback, updateDiscoveredDevicesList are unchanged) ...
     private fun startAdvertising() {
         val advertisingOptions = AdvertisingOptions.Builder().setStrategy(STRATEGY).build()
         connectionsClient.startAdvertising(
@@ -236,7 +266,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Function to stop advertising
     private fun stopAdvertising() {
         connectionsClient.stopAdvertising()
         isAdvertising = false
@@ -253,7 +282,6 @@ class MainActivity : AppCompatActivity() {
             Log.d("MainActivity", "Discovery started successfully")
             isDiscovering = true
             discoverButton.text = "Stop Discovery"
-            // NEW: Show discovery UI
             discoveredDevicesLabel.visibility = View.VISIBLE
             discoveredDevicesRecyclerView.visibility = View.VISIBLE
         }.addOnFailureListener { e ->
@@ -263,12 +291,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // NEW: Function to stop discovery
     private fun stopDiscovery() {
         connectionsClient.stopDiscovery()
         isDiscovering = false
         discoverButton.text = "Discover"
-        // NEW: Hide discovery UI and clear list
         discoveredEndpoints.clear()
         updateDiscoveredDevicesList()
         discoveredDevicesLabel.visibility = View.GONE
@@ -279,7 +305,6 @@ class MainActivity : AppCompatActivity() {
     private val connectionLifecycleCallback = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, connectionInfo: ConnectionInfo) {
             Log.d("MainActivity", "onConnectionInitiated: accepting connection")
-            // NEW: Show a dialog to accept the connection
             AlertDialog.Builder(this@MainActivity)
                 .setTitle("Accept Connection")
                 .setMessage("Accept connection from ${connectionInfo.endpointName}?")
@@ -298,7 +323,6 @@ class MainActivity : AppCompatActivity() {
                 ConnectionsStatusCodes.STATUS_OK -> {
                     Log.d("MainActivity", "onConnectionResult: Connection successful!")
                     Toast.makeText(this@MainActivity, "Connected to ${connectedEndpoints[endpointId]}", Toast.LENGTH_SHORT).show()
-                    // NEW: A connection is established, stop discovery to save battery
                     stopDiscovery()
                 }
                 ConnectionsStatusCodes.STATUS_CONNECTION_REJECTED -> {
@@ -328,7 +352,6 @@ class MainActivity : AppCompatActivity() {
     private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, discoveredEndpointInfo: DiscoveredEndpointInfo) {
             Log.d("MainActivity", "onEndpointFound: endpoint found: ${discoveredEndpointInfo.endpointName}")
-            // NEW: Add to list and update UI
             if (!connectedEndpoints.containsKey(endpointId)) {
                 discoveredEndpoints[endpointId] = discoveredEndpointInfo
                 updateDiscoveredDevicesList()
@@ -337,13 +360,11 @@ class MainActivity : AppCompatActivity() {
 
         override fun onEndpointLost(endpointId: String) {
             Log.d("MainActivity", "onEndpointLost: endpoint lost: $endpointId")
-            // NEW: Remove from list and update UI
             discoveredEndpoints.remove(endpointId)
             updateDiscoveredDevicesList()
         }
     }
 
-    // NEW: Helper function to update the discovered devices RecyclerView
     private fun updateDiscoveredDevicesList() {
         discoveredDeviceAdapter = DiscoveredDeviceAdapter(discoveredEndpoints.toList()) { endpointId ->
             if (!connectedEndpoints.containsKey(endpointId)) {
@@ -363,13 +384,110 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun sendMessage(messageText: String, recipientId: String) {
-        if (connectedEndpoints.isEmpty()){
+    // --- NEW HELPER FUNCTIONS ---
+
+    @SuppressLint("Range")
+    private fun getFileName(uri: Uri): String {
+        var name = "unknown_image.jpg"
+        val cursor = contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                name = it.getString(it.getColumnIndex(OpenableColumns.DISPLAY_NAME))
+            }
+        }
+        return name
+    }
+
+    private fun clearAttachment() {
+        pendingImageUri = null
+        attachmentPreviewTextView.visibility = View.GONE
+        attachmentPreviewTextView.text = ""
+        messageEditText.isEnabled = true
+        messageEditText.hint = "Type a message..."
+    }
+
+    private fun uriToBase64(uri: Uri): String? {
+        return try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+            inputStream?.close()
+
+            // Scale down bitmap to avoid OOM errors and large payloads
+            val scaledBitmap = scaleBitmap(bitmap, 800) // 800px max dimension
+
+            val outputStream = ByteArrayOutputStream()
+            scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 70, outputStream)
+            val byteArray = outputStream.toByteArray()
+            Base64.encodeToString(byteArray, Base64.DEFAULT)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error converting URI to Base64", e)
+            null
+        }
+    }
+
+    private fun scaleBitmap(bitmap: Bitmap, maxDimension: Int): Bitmap {
+        val originalWidth = bitmap.width
+        val originalHeight = bitmap.height
+
+        if (originalWidth <= maxDimension && originalHeight <= maxDimension) {
+            return bitmap
+        }
+
+        val newWidth: Int
+        val newHeight: Int
+
+        if (originalWidth > originalHeight) {
+            newWidth = maxDimension
+            newHeight = (originalHeight * (maxDimension.toFloat() / originalWidth)).toInt()
+        } else {
+            newHeight = maxDimension
+            newWidth = (originalWidth * (maxDimension.toFloat() / originalHeight)).toInt()
+        }
+
+        return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+    }
+
+    // --- MODIFIED SEND/RECEIVE LOGIC ---
+
+    // NEW: Combined send function
+    private fun sendMessage(recipientId: String) {
+        if (connectedEndpoints.isEmpty()) {
             Toast.makeText(this, "No one is connected. Message not sent.", Toast.LENGTH_SHORT).show()
             return
         }
+
         val msgId = "$myUsername-${System.currentTimeMillis()}"
-        val message = Message(msgId, myUsername, recipientId, messageText)
+        val message: Message
+
+        if (pendingImageUri != null) {
+            // This is an image message
+            try {
+                val imageString = uriToBase64(pendingImageUri!!)
+                if (imageString == null) {
+                    Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show()
+                    return
+                }
+                // Use the Base64 string as the messageText
+                message = Message(msgId, myUsername, recipientId, "IMAGE", imageString)
+                clearAttachment()
+
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Failed to convert image to Base64", e)
+                Toast.makeText(this, "Failed to send image", Toast.LENGTH_SHORT).show()
+                return
+            }
+        } else {
+            // This is a text message
+            val messageText = messageEditText.text.toString().trim()
+            if (messageText.isEmpty()) {
+                Toast.makeText(this, "Please enter a message", Toast.LENGTH_SHORT).show()
+                return
+            }
+            message = Message(msgId, myUsername, recipientId, "TEXT", messageText)
+            messageEditText.text.clear()
+        }
+
+        // --- Common logic for both types ---
         seenSet.add(message.msgId)
         runOnUiThread {
             messages.add(message)
@@ -377,10 +495,17 @@ class MainActivity : AppCompatActivity() {
             messagesRecyclerView.scrollToPosition(messages.size - 1)
         }
         forwardMessage(message)
+
+        // Clear recipient ID only for private messages
+        if (recipientId != "BROADCAST") {
+            recipientIdEditText.text.clear()
+        }
     }
 
+    // MODIFIED: forwardMessage now serializes the 5-part Message object
     private fun forwardMessage(message: Message) {
-        val messageString = "${message.msgId}|${message.senderId}|${message.recipientId}|${message.messageText}"
+        // "TYPE|msgId|sender|recipient|messageText (or Base64)"
+        val messageString = "${message.messageType}|${message.msgId}|${message.senderId}|${message.recipientId}|${message.messageText}"
         val payload = Payload.fromBytes(messageString.toByteArray(StandardCharsets.UTF_8))
         connectionsClient.sendPayload(connectedEndpoints.keys.toList(), payload)
             .addOnFailureListener { e ->
@@ -388,22 +513,29 @@ class MainActivity : AppCompatActivity() {
             }
     }
 
+    // MODIFIED: payloadCallback now parses the 5-part Message object
     private val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             if (payload.type == Payload.Type.BYTES) {
                 val receivedString = payload.asBytes()?.toString(StandardCharsets.UTF_8)
                 val parts = receivedString?.split("|")
-                if (parts != null && parts.size == 4) {
-                    val msgId = parts[0]
-                    val senderId = parts[1]
-                    val recipientId = parts[2]
-                    val messageText = parts[3]
+
+                // MODIFIED: Check for 5 parts
+                if (parts != null && parts.size == 5) {
+                    val messageType = parts[0]
+                    val msgId = parts[1]
+                    val senderId = parts[2]
+                    val recipientId = parts[3]
+                    val messageText = parts[4] // This is text OR Base64
 
                     if (seenSet.contains(msgId)) {
                         return
                     }
                     seenSet.add(msgId)
-                    val receivedMessage = Message(msgId, senderId, recipientId, messageText)
+
+                    // Re-create the message object
+                    val receivedMessage = Message(msgId, senderId, recipientId, messageType, messageText)
+
                     if (recipientId == "BROADCAST" || recipientId == myUsername) {
                         runOnUiThread {
                             messages.add(receivedMessage)
@@ -411,11 +543,14 @@ class MainActivity : AppCompatActivity() {
                             messagesRecyclerView.scrollToPosition(messages.size - 1)
                         }
                     }
+                    // Forward the original message object
                     forwardMessage(receivedMessage)
                 }
             }
         }
+
         override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
+            // This is not used for BYTES payloads
         }
     }
 }

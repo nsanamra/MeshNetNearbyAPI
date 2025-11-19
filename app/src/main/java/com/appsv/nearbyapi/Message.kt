@@ -7,6 +7,6 @@ data class Message(
     val msgId: String,
     val senderId: String,
     val recipientId: String,
-    val messageText: String
+    val messageType: String, // "TEXT" or "IMAGE"
+    val messageText: String  // Will hold text OR a Base64-encoded image
 ) : Serializable
-
