@@ -64,6 +64,8 @@
         android:visibility="gone"
         tools:visibility="visible"/>
 
+    <!-- BOTTOM UI (Chat) -->
+
     <LinearLayout
         android:id="@+id/buttonLayout"
         android:layout_width="match_parent"
@@ -73,15 +75,18 @@
         android:paddingTop="10dp"
         android:orientation="horizontal">
 
+        <!-- Attach Image Button -->
         <ImageButton
             android:id="@+id/attachImageButton"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:src="@android:drawable/ic_menu_gallery" style="@style/Widget.AppCompat.Button.Colored"
+            android:src="@android:drawable/ic_menu_gallery"
+            style="@style/Widget.AppCompat.Button.Colored"
             android:contentDescription="Attach Image"
             android:paddingStart="12dp"
             android:paddingEnd="12dp"/>
 
+        <!-- CHANGED: Restored Broadcast Button -->
         <Button
             android:id="@+id/sendBroadcastButton"
             style="@style/Widget.AppCompat.Button.Colored"
@@ -89,8 +94,10 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginEnd="4dp"
+            android:layout_marginStart="4dp"
             android:text="Broadcast" />
 
+        <!-- CHANGED: Restored Private Button -->
         <Button
             android:id="@+id/sendPrivateButton"
             style="@style/Widget.AppCompat.Button.Colored"
@@ -98,7 +105,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="4dp"
-            android:text="Send Private" />
+            android:text="Private" />
     </LinearLayout>
 
     <EditText
@@ -112,6 +119,7 @@
         android:padding="12dp"
         android:textColor="@android:color/black" />
 
+    <!-- Attachment Preview -->
     <TextView
         android:id="@+id/attachmentPreviewTextView"
         android:layout_width="match_parent"
@@ -125,22 +133,22 @@
         android:visibility="gone"
         tools:visibility="visible"/>
 
-    <EditText
-        android:id="@+id/recipientIdEditText"
+    <!-- Recipient Spinner (Dropdown) -->
+    <Spinner
+        android:id="@+id/recipientSpinner"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_above="@id/attachmentPreviewTextView" android:background="@android:drawable/edit_text"
+        android:layout_height="50dp"
+        android:layout_above="@id/attachmentPreviewTextView"
         android:layout_marginBottom="8dp"
-        android:hint="Recipient ID (for one-to-one)"
-        android:inputType="textShortMessage"
-        android:padding="12dp"
-        android:textColor="@android:color/black" />
+        android:background="@android:drawable/btn_dropdown"
+        android:spinnerMode="dropdown" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/messagesRecyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_above="@id/recipientIdEditText" android:layout_below="@id/discoveredDevicesRecyclerView"
+        android:layout_above="@id/recipientSpinner"
+        android:layout_below="@id/discoveredDevicesRecyclerView"
         android:layout_marginTop="8dp"
         android:contentDescription="List of chat messages" />
 
