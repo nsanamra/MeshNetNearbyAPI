@@ -64,6 +64,16 @@
         android:visibility="gone"
         tools:visibility="visible"/>
 
+    <ProgressBar
+        android:id="@+id/sendingProgressBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:visibility="gone"
+        android:elevation="10dp"/>
+
+    <!-- BOTTOM UI (Chat) -->
+
     <LinearLayout
         android:id="@+id/buttonLayout"
         android:layout_width="match_parent"
@@ -73,6 +83,16 @@
         android:paddingTop="10dp"
         android:orientation="horizontal">
 
+        <ImageButton
+            android:id="@+id/attachImageButton"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:src="@android:drawable/ic_menu_gallery"
+            style="@style/Widget.AppCompat.Button.Colored"
+            android:contentDescription="Attach Image"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"/>
+
         <Button
             android:id="@+id/sendBroadcastButton"
             style="@style/Widget.AppCompat.Button.Colored"
@@ -80,6 +100,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginEnd="4dp"
+            android:layout_marginStart="4dp"
             android:text="Broadcast" />
 
         <Button
@@ -89,7 +110,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="4dp"
-            android:text="Send Private" />
+            android:text="Private" />
     </LinearLayout>
 
     <EditText
@@ -103,23 +124,34 @@
         android:padding="12dp"
         android:textColor="@android:color/black" />
 
-    <EditText
-        android:id="@+id/recipientIdEditText"
+    <!-- Preview Layout -->
+    <TextView
+        android:id="@+id/attachmentPreviewTextView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_above="@id/messageEditText"
-        android:background="@android:drawable/edit_text"
+        android:layout_marginBottom="4dp"
+        android:padding="8dp"
+        android:background="#E0E0E0"
+        android:text="Image attached (click to clear)"
+        android:textColor="@android:color/black"
+        android:visibility="gone"
+        tools:visibility="visible"/>
+
+    <Spinner
+        android:id="@+id/recipientSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_above="@id/attachmentPreviewTextView"
         android:layout_marginBottom="8dp"
-        android:hint="Recipient ID (for one-to-one)"
-        android:inputType="textShortMessage"
-        android:padding="12dp"
-        android:textColor="@android:color/black" />
+        android:background="@android:drawable/btn_dropdown"
+        android:spinnerMode="dropdown" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/messagesRecyclerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_above="@id/recipientIdEditText"
+        android:layout_above="@id/recipientSpinner"
         android:layout_below="@id/discoveredDevicesRecyclerView"
         android:layout_marginTop="8dp"
         android:contentDescription="List of chat messages" />
