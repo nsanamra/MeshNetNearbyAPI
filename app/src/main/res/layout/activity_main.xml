@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F0F4F8"
+    android:padding="16dp"
+    tools:context="com.appsv.nearbyapi.MainActivity">
+
+    <TextView
+        android:id="@+id/userIdTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_centerHorizontal="true"
+        android:textColor="#555555"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        tools:text="Your ID: 123456789" />
+
+    <LinearLayout
+        android:id="@+id/discoveryButtonsLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/userIdTextView"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/advertiseButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="Advertise" />
+
+        <Button
+            android:id="@+id/discoverButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:text="Discover" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/discoveredDevicesLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/discoveryButtonsLayout"
+        android:layout_marginTop="16dp"
+        android:text="Discovered Devices:"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:visibility="visible"/>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/discoveredDevicesRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="100dp"
+        android:layout_below="@id/discoveredDevicesLabel"
+        android:layout_marginTop="8dp"
+        android:visibility="gone"
+        tools:visibility="visible"/>
+
+    <ProgressBar
+        android:id="@+id/sendingProgressBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:visibility="gone"
+        android:elevation="10dp"/>
+
+    <!-- BOTTOM UI (Chat) -->
+
+    <LinearLayout
+        android:id="@+id/buttonLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:gravity="center_vertical"
+        android:paddingTop="10dp"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/attachImageButton"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:src="@android:drawable/ic_menu_gallery"
+            style="@style/Widget.AppCompat.Button.Colored"
+            android:contentDescription="Attach Image"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"/>
+
+        <Button
+            android:id="@+id/sendBroadcastButton"
+            style="@style/Widget.AppCompat.Button.Colored"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:layout_marginStart="4dp"
+            android:text="Broadcast" />
+
+        <Button
+            android:id="@+id/sendPrivateButton"
+            style="@style/Widget.AppCompat.Button.Colored"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:text="Private" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/messageEditText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_above="@id/buttonLayout"
+        android:background="@android:drawable/edit_text"
+        android:hint="Type a message..."
+        android:inputType="textShortMessage"
+        android:padding="12dp"
+        android:textColor="@android:color/black" />
+
+    <!-- Preview Layout -->
+    <TextView
+        android:id="@+id/attachmentPreviewTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_above="@id/messageEditText"
+        android:layout_marginBottom="4dp"
+        android:padding="8dp"
+        android:background="#E0E0E0"
+        android:text="Image attached (click to clear)"
+        android:textColor="@android:color/black"
+        android:visibility="gone"
+        tools:visibility="visible"/>
+
+    <!-- NEW: Manual ID Entry (Mesh Routing) -->
+    <EditText
+        android:id="@+id/targetUserEditText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_above="@id/attachmentPreviewTextView"
+        android:layout_marginBottom="4dp"
+        android:background="@android:drawable/edit_text"
+        android:hint="OR Enter Manual Target ID (for mesh)"
+        android:inputType="text"
+        android:padding="12dp"
+        android:textColor="@android:color/black"
+        android:textSize="14sp"/>
+
+    <!-- RESTORED: Spinner -->
+    <Spinner
+        android:id="@+id/recipientSpinner"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_above="@id/targetUserEditText"
+        android:layout_marginBottom="4dp"
+        android:background="@android:drawable/btn_dropdown"
+        android:spinnerMode="dropdown" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/messagesRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_above="@id/recipientSpinner"
+        android:layout_below="@id/discoveredDevicesRecyclerView"
+        android:layout_marginTop="8dp"
+        android:contentDescription="List of chat messages" />
+
+</RelativeLayout>
