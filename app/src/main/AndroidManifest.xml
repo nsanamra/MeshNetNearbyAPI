@@ -35,6 +35,12 @@
         android:theme="@style/Theme.NearbyApi"
         tools:targetApi="31">
 
+
+        <!-- FIX: Use the fully qualified name for MembersActivity -->
+        <activity android:name="com.appsv.nearbyapi.MembersActivity"
+            android:label="Active Members"
+            android:exported="false"/>
+
         <!-- ADDED: configChanges to prevent Activity recreation on rotation -->
         <activity
             android:name="com.appsv.nearbyapi.MainActivity"

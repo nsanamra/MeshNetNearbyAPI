@@ -18,11 +18,24 @@
         android:textStyle="bold"
         tools:text="Your ID: 123456789" />
 
+    <!-- NEW BUTTON HERE -->
+    <Button
+        android:id="@+id/showMembersButton"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:layout_below="@id/userIdTextView"
+        android:layout_centerHorizontal="true"
+        android:layout_marginTop="4dp"
+        android:text="Show Members"
+        android:backgroundTint="#3F51B5"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"/>
+
     <LinearLayout
         android:id="@+id/discoveryButtonsLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@id/userIdTextView"
+        android:layout_below="@id/showMembersButton"
         android:layout_marginTop="8dp"
         android:orientation="horizontal">
 

@@ -3,6 +3,7 @@ package com.appsv.nearbyapi
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -41,6 +42,7 @@ import com.google.crypto.tink.HybridEncrypt
 import com.google.crypto.tink.KeyTemplates
 import com.google.crypto.tink.KeysetHandle
 import com.google.crypto.tink.config.TinkConfig
+import kotlinx.coroutines.*
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
@@ -52,13 +54,20 @@ class MainActivity : AppCompatActivity() {
     private val STRATEGY = Strategy.P2P_STAR
     private val SERVICE_ID = "com.appsv.nearbyapi.SERVICE_ID"
 
-    // Persist User ID to prevent key mismatch on restart
+    // --- HEARTBEAT CONSTANTS ---
+    private val HEARTBEAT_INTERVAL_MS = 15000L // Send heartbeat every 15s (Faster for testing)
+    private val TIMEOUT_MS = 45000L // Mark offline if not seen for 45s
+
+    // --- COROUTINES ---
+    private val mainScope = CoroutineScope(Dispatchers.Main + Job())
+
+    // Persist User ID
     private val myUsername: String by lazy {
         val prefs = getSharedPreferences("ChatAppPrefs", Context.MODE_PRIVATE)
         var id = prefs.getString("USER_ID", null)
         if (id == null) {
             id = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-            if (id == null || id == "9774d56d682e549c") { // Common emulator ID
+            if (id == null || id == "9774d56d682e549c") {
                 id = UUID.randomUUID().toString()
             }
             prefs.edit().putString("USER_ID", id).apply()
@@ -81,11 +90,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recipientAdapter: ArrayAdapter<String>
     private val recipientList = ArrayList<String>()
 
-    // NEW: Manual ID Input
     private lateinit var targetUserEditText: EditText
 
     private lateinit var sendBroadcastButton: Button
     private lateinit var sendPrivateButton: Button
+
+    // NEW BUTTON
+    private lateinit var showMembersButton: Button
 
     private lateinit var advertiseButton: Button
     private lateinit var discoverButton: Button
@@ -152,6 +163,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Init Myself in MeshRepository
+        MeshRepository.updateMember(myUsername, "You", System.currentTimeMillis())
+
         initEncryption()
 
         if (savedInstanceState != null) {
@@ -168,11 +182,13 @@ class MainActivity : AppCompatActivity() {
         recipientAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, recipientList)
         recipientSpinner.adapter = recipientAdapter
 
-        // Initialize new EditText
         targetUserEditText = findViewById(R.id.targetUserEditText)
 
         sendBroadcastButton = findViewById(R.id.sendBroadcastButton)
         sendPrivateButton = findViewById(R.id.sendPrivateButton)
+
+        // NEW BUTTON
+        showMembersButton = findViewById(R.id.showMembersButton)
 
         advertiseButton = findViewById(R.id.advertiseButton)
         discoverButton = findViewById(R.id.discoverButton)
@@ -213,6 +229,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // NEW: Open Members Activity
+        showMembersButton.setOnClickListener {
+            val intent = Intent(this, MembersActivity::class.java)
+            startActivity(intent)
+        }
+
         attachImageButton.setOnClickListener { imagePickerLauncher.launch("image/*") }
 
         attachmentPreviewTextView.setOnClickListener { clearAttachment() }
@@ -221,7 +243,6 @@ class MainActivity : AppCompatActivity() {
             sendMessage("BROADCAST")
         }
 
-        // Priority Logic (Manual ID > Spinner)
         sendPrivateButton.setOnClickListener {
             val manualId = targetUserEditText.text.toString().trim()
             val spinnerId = recipientSpinner.selectedItem?.toString()
@@ -260,6 +281,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // --- GOSSIP / PRESENCE LOGIC ---
+
+    private fun startHeartbeat() {
+        mainScope.launch {
+            while (isActive) {
+                if (connectedEndpoints.isNotEmpty()) {
+                    sendPresenceHeartbeat()
+                }
+                MeshRepository.pruneExpiredMembers(TIMEOUT_MS)
+                delay(HEARTBEAT_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun sendPresenceHeartbeat() {
+        val msgId = "$myUsername-P-${System.currentTimeMillis()}"
+        // We pack the timestamp and name into the messageText.
+        // Format: "TIMESTAMP_NAME"
+        val content = "${System.currentTimeMillis()}_$myUsername"
+        val message = Message(msgId, myUsername, "BROADCAST", "PRESENCE", content)
+
+        seenSet.add(msgId)
+        MeshRepository.updateMember(myUsername, "You", System.currentTimeMillis()) // Update self
+        forwardMessage(message)
+    }
+
     private fun broadcastPublicKey() {
         if (connectedEndpoints.isEmpty()) return
         val msgId = "$myUsername-${System.currentTimeMillis()}-KEY"
@@ -279,19 +326,13 @@ class MainActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (!hasPermissions()) requestPermissions()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        // NOTE: Removed stopAdvertising/Discovery from here to potentially help,
-        // but configChanges is the real fix.
-        // If you want the app to stop broadcasting when minimized, you can put them back.
-        // For mesh reliability, keeping them running is often better.
+        startHeartbeat() // START GOSSIP
     }
 
     override fun onDestroy() {
         connectionsClient.stopAllEndpoints()
         connectedEndpoints.clear()
+        mainScope.cancel() // Stop coroutines
         super.onDestroy()
     }
 
@@ -369,6 +410,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this@MainActivity, "Connected!", Toast.LENGTH_SHORT).show()
                 stopDiscovery()
                 broadcastPublicKey()
+                sendPresenceHeartbeat() // IMMEDIATE ADVERTISEMENT
             } else {
                 connectedEndpoints.remove(endpointId)
             }
@@ -384,10 +426,8 @@ class MainActivity : AppCompatActivity() {
                     if (recipientList.contains(username)) {
                         recipientList.remove(username)
                         recipientAdapter.notifyDataSetChanged()
-                        Toast.makeText(this@MainActivity, "$username disconnected", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(this@MainActivity, "Device disconnected", Toast.LENGTH_SHORT).show()
                     }
+                    Toast.makeText(this@MainActivity, "Disconnected", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -522,6 +562,20 @@ class MainActivity : AppCompatActivity() {
 
                     if (seenSet.contains(msgId)) return
                     seenSet.add(msgId)
+
+                    // 1. Handle PRESENCE immediately
+                    if (type == "PRESENCE") {
+                        // Content format: "TIMESTAMP_NAME"
+                        val data = content.split("_", limit = 2)
+                        if (data.size == 2) {
+                            val timestamp = data[0].toLongOrNull() ?: System.currentTimeMillis()
+                            val name = data[1]
+                            MeshRepository.updateMember(sender, name, timestamp)
+                        }
+                        // Flood the presence update
+                        forwardMessage(Message(msgId, sender, recipient, type, content))
+                        return
+                    }
 
                     if (type == "KEY") {
                         handleIncomingKey(sender, content)
