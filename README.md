@@ -144,7 +144,7 @@ Every 15s:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/nearby-mesh-chat.git
+   git clone https://github.com/nsanamra/MeshNetNearbyAPI.git
    cd nearby-mesh-chat
    ```
 
@@ -443,27 +443,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Your Name**
 
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Email: your.email@example.com
-
----
-
-## 🙏 Acknowledgments
-
-- Google Nearby Connections API team
-- Google Tink cryptography library
-- Android developer community
-- All contributors and testers
-
----
-
-## 📞 Support
-
-If you have any questions or need help:
-
-- 📧 Email: support@example.com
-- 💬 Issues: [GitHub Issues](https://github.com/yourusername/nearby-mesh-chat/issues)
-- 📖 Wiki: [Project Wiki](https://github.com/yourusername/nearby-mesh-chat/wiki)
+- GitHub: [@nsanamra](https://github.com/nsanamra/)
+- Email: developernamra@gmail.com.com
 
 ---
 
