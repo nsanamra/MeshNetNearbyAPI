@@ -17,7 +17,7 @@
 
 ---
 
-## 🌟 Overview
+## Overview
 
 Nearby Mesh Chat is a cutting-edge Android application that enables peer-to-peer communication without requiring internet connectivity or cellular service. Using Google's Nearby Connections API, the app creates a dynamic mesh network where messages can hop through multiple devices to reach their destination, similar to how emergency communication networks operate.
 
@@ -30,56 +30,56 @@ Perfect for:
 
 ---
 
-## ✨ Features
+## Features
 
-### 🔐 **End-to-End Encryption**
+### **End-to-End Encryption**
 - **Hybrid Encryption** using Google Tink (DHKEM with AES-256-GCM)
 - Automatic key exchange between peers
 - Private messages are encrypted before transmission
 - Only intended recipients can decrypt messages
 
-### 🌐 **Mesh Network Topology**
+### **Mesh Network Topology**
 - **Gossip Protocol** for message flooding
 - Messages automatically route through intermediate devices
 - P2P_STAR strategy for optimal connectivity
 - Automatic peer discovery and connection management
 - Send messages to users not directly connected to you
 
-### 💬 **Flexible Messaging**
+### **Flexible Messaging**
 - **Broadcast Messages**: Send to all connected users
 - **Private Messages**: Encrypted one-to-one communication
 - **Manual Routing**: Send messages to specific user IDs for mesh routing
 - **Image Sharing**: Attach and send compressed images
 - Real-time message delivery and display
 
-### 👥 **Active Member Tracking**
+### **Active Member Tracking**
 - **Live Presence System** with heartbeat mechanism (15s intervals)
 - Automatic timeout detection (45s)
 - Dedicated Members Activity showing all active users
 - Real-time last-seen timestamps
 - Persistent member list across the mesh
 
-### 📸 **Rich Media Support**
+### **Rich Media Support**
 - Image attachment and transmission
 - Automatic image compression and scaling
 - Base64 encoding for reliable transport
 - **Download to Gallery** feature for received images
 - Preview before sending
 
-### 🔄 **Automatic Discovery**
+### **Automatic Discovery**
 - One-tap advertising mode
 - Device discovery with visual list
 - Connection request dialogs
 - Automatic reconnection handling
 
-### 💾 **State Persistence**
+### **State Persistence**
 - Messages survive orientation changes
 - User ID persistence using SharedPreferences
 - Unique device identification (Android ID + UUID fallback)
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### **Design Pattern**
 - **MVVM-inspired** architecture with repository pattern
@@ -132,7 +132,7 @@ Every 15s:
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### **Prerequisites**
 - Android Studio Arctic Fox or later
@@ -145,7 +145,7 @@ Every 15s:
 1. **Clone the repository**
    ```bash
    git clone https://github.com/nsanamra/MeshNetNearbyAPI.git
-   cd nearby-mesh-chat
+   cd MeshNetNearbyAPI
    ```
 
 2. **Open in Android Studio**
@@ -184,7 +184,7 @@ implementation("com.google.android.material:material:1.10.0")
 
 ---
 
-## 🚀 Usage
+## Usage
 
 ### **First Launch**
 
@@ -240,7 +240,7 @@ implementation("com.google.android.material:material:1.10.0")
 
 ---
 
-## 🔧 Technical Details
+## Technical Details
 
 ### **Encryption Specification**
 
@@ -345,7 +345,7 @@ onDisconnected() → Clean up peer data
 
 ---
 
-## 📱 Screenshots
+## Screenshots
 
 ### Main Chat Interface
 - Real-time message list with sent/received bubbles
@@ -367,7 +367,7 @@ onDisconnected() → Clean up peer data
 
 ---
 
-## 🛡️ Permissions
+## Permissions
 
 ```xml
 <!-- Bluetooth (Legacy) -->
@@ -396,7 +396,7 @@ onDisconnected() → Clean up peer data
 
 ---
 
-## 🐛 Known Limitations
+## Known Limitations
 
 - **Range**: Limited by Bluetooth/WiFi Direct range (~100m line-of-sight)
 - **Concurrent Connections**: P2P_STAR typically supports 8-10 connections
@@ -406,7 +406,7 @@ onDisconnected() → Clean up peer data
 
 ---
 
-## 🔮 Future Enhancements
+## Future Enhancements
 
 - [ ] Message persistence with Room database
 - [ ] File sharing (documents, videos)
@@ -421,7 +421,7 @@ onDisconnected() → Clean up peer data
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please follow these steps:
 
